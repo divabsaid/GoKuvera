@@ -1,8 +1,8 @@
 # GoKuvera
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/gin-gonic/gin)](https://goreportcard.com/report/github.com/gin-gonic/gin)
-[![GoDoc](https://pkg.go.dev/badge/github.com/gin-gonic/gin?status.svg)](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc)
-[![Release](https://img.shields.io/github/release/gin-gonic/gin.svg?style=flat-square)](https://github.com/gin-gonic/gin/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/divabsaid/GoKuvera)](https://goreportcard.com/report/github.com/divabsaid/GoKuvera)
+[![GoDoc](https://pkg.go.dev/badge/github.com/divabsaid/GoKuvera?status.svg)](https://pkg.go.dev/github.com/divabsaid/GoKuvera?tab=doc)
+[![Release](https://img.shields.io/github/release/divabsaid/GoKuvera.svg?style=flat-square)](https://github.com/divabsaid/GoKuvera/releases)
 
 GoKuvera simplifies the implementation of the Kuvera Payment Gateway on the client side written in [Go](https://go.dev/).
 
@@ -116,7 +116,7 @@ import (
     "gokuvera"
     "io"
 
-    "github.com/gin-gonic/gin"
+    "github.com/divabsaid/GoKuvera"
 )
 
 func main() {
