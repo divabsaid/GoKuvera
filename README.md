@@ -26,7 +26,25 @@ Supported payment channels and methods
 | Shopee Pay | ❌            | ❌      | ❌      | ✅         | ✅           |
 | Gopay      | ❌            | ❌      | ❌      | ✅         | ✅           |
 
-Otherwise, run the following Go command to install the `GoKuvera` package:
+
+Payment Methods
+- `gokuvera.BankTransferMethod`
+- `gokuvera.BankVAMethod`
+- `gokuvera.BankQRMethod`
+- `gokuvera.EwalletQRMethod`
+- `gokuvera.EwalletLinkMethod`
+
+Payment Channels
+- `gokuvera.BCAChannel`
+- `gokuvera.BNIChannel`
+- `gokuvera.BRIChannel`
+- `gokuvera.MandiriChannel`
+- `gokuvera.PermataChannel`
+- `gokuvera.NobuChannel`
+- `gokuvera.ShopeePayChannel`
+- `gokuvera.GopayChannel`
+
+Run the following Go command to install the `GoKuvera` package:
 
 ```sh
 $ go get github.com/divabsaid/GoKuvera
@@ -62,7 +80,6 @@ Create instance of `GoKuvera` by passing
 ```
 
 #### Create Payment
-
 ```go
     data, err = gk.CreatePayment(&gokuvera.Transaction{
         Channel:               gokuvera.BCAChannel,
@@ -107,7 +124,7 @@ Create instance of `GoKuvera` by passing
     }
 ```
 
-Using Gin
+Using [Gin](https://gin-gonic.com/) 
 
 ```go
 package main
@@ -171,7 +188,7 @@ func main() {
 }
 ```
 
-Using Fiber
+Using [Fiber](https://gofiber.io/)
 
 ```go
 package main
