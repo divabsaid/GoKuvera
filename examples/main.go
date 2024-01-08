@@ -1,8 +1,9 @@
 package main
 
 import (
-	"gokuvera"
 	"log"
+
+	gokuvera "github.com/divabsaid/GoKuvera"
 )
 
 func main() {
