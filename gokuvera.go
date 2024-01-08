@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/ssh"
 )
 
 var once sync.Once
@@ -41,7 +40,7 @@ type Kuvera interface {
 	CreatePayment(transaction *Transaction) (map[string]interface{}, error)
 	CheckPayment(transactionID string) (map[string]interface{}, error)
 	CancelPayment(transactionID string) (map[string]interface{}, error)
-	CallbackValidation(timestamp, signature string, requestBody interface{}) error
+	CallbackValidation(timestamp, signature string, requestBody []byte) error
 }
 
 type kuvera struct {
@@ -53,8 +52,9 @@ type kuvera struct {
 	channelID    string
 	origin       string
 
-	privateKey []byte
-	publicKey  []byte
+	clientPrivateKey []byte
+	clientPublicKey  []byte
+	serverPublicKey  []byte
 }
 
 type Transaction struct {
@@ -65,7 +65,7 @@ type Transaction struct {
 	Name                  string
 }
 
-func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, privateKey, publicKey []byte) Kuvera {
+func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, clientPrivateKey, clientPublicKey, serverPublicKey []byte) Kuvera {
 	interfaces, _ := net.Interfaces()
 
 	var macAddress string
@@ -94,13 +94,14 @@ func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, private
 		channelID:    hashDecimal.String(),
 		origin:       parsedCallbackURL.Host,
 
-		privateKey: privateKey,
-		publicKey:  publicKey,
+		clientPrivateKey: clientPrivateKey,
+		clientPublicKey:  clientPublicKey,
+		serverPublicKey:  serverPublicKey,
 	}
 }
 
 func (kvr *kuvera) CreatePayment(transaction *Transaction) (map[string]interface{}, error) {
-	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.privateKey)
+	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -127,7 +128,7 @@ func (kvr *kuvera) CreatePayment(transaction *Transaction) (map[string]interface
 }
 
 func (kvr *kuvera) CheckPayment(transactionID string) (map[string]interface{}, error) {
-	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.privateKey)
+	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func (kvr *kuvera) CheckPayment(transactionID string) (map[string]interface{}, e
 }
 
 func (kvr *kuvera) CancelPayment(transactionID string) (map[string]interface{}, error) {
-	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.privateKey)
+	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -170,35 +171,20 @@ func (kvr *kuvera) CancelPayment(transactionID string) (map[string]interface{}, 
 	return resBody["data"].(map[string]interface{}), nil
 }
 
-func (kvr *kuvera) CallbackValidation(timestamp, signature string, requestBody interface{}) error {
-	authKeyParsed, _, _, _, err := ssh.ParseAuthorizedKey(kvr.publicKey)
+func (kvr *kuvera) CallbackValidation(timestamp, signature string, requestBody []byte) error {
+	publicKey, err := parsePublicKey(kvr.serverPublicKey)
 	if err != nil {
 		return err
 	}
 
-	pubKeyBytes := authKeyParsed.Marshal()
-	parsedPubKey, err := ssh.ParsePublicKey(pubKeyBytes)
-	if err != nil {
-		return err
-	}
-
-	parsedCryptoKey := parsedPubKey.(ssh.CryptoPublicKey)
-	pubCrypto := parsedCryptoKey.CryptoPublicKey()
-	publicKey := pubCrypto.(*rsa.PublicKey)
-
-	requestBodyByte, err := marshalJSONCompact(requestBody)
-	if err != nil {
-		return err
-	}
-
-	stringToSignHashSum, err := hashSHA256(requestBodyByte)
+	stringToSignHashSum, err := hashSHA256(requestBody)
 	if err != nil {
 		return err
 	}
 
 	requestBodyHash := strings.ToLower(hex.EncodeToString(stringToSignHashSum))
 
-	stringToSign := fmt.Sprintf("%s:%s:%s:%s", http.MethodPost, kvr.callbackURL, requestBodyHash, timestamp)
+	stringToSign := fmt.Sprintf("%s:%s:%s:%s", http.MethodPost, "localhost/webhook", requestBodyHash, timestamp)
 
 	stringToSignHashSum, err = hashSHA256([]byte(stringToSign))
 	if err != nil {
@@ -210,7 +196,7 @@ func (kvr *kuvera) CallbackValidation(timestamp, signature string, requestBody i
 		return err
 	}
 
-	err = rsa.VerifyPSS(publicKey, crypto.SHA256, stringToSignHashSum, signatureBytes, nil)
+	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, stringToSignHashSum, signatureBytes)
 	if err != nil {
 		return err
 	}
@@ -413,4 +399,16 @@ func doTransactionMethodPostRequest(baseURL, relativeURL, accessToken, origin, p
 	}
 
 	return resBody, nil
+}
+
+func parsePublicKey(publicKey []byte) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode(publicKey)
+	if block == nil {
+		return nil, errors.New("failed to parse public key")
+	}
+	key, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return key.(*rsa.PublicKey), nil
 }
