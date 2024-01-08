@@ -1,4 +1,4 @@
-module gokuvera
+module github.com/divabsaid/GoKuvera
 
 go 1.18
 
