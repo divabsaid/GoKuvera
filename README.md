@@ -1,5 +1,10 @@
 # GoKuvera
-GoKuvera simplifies the implementation of the Kuvera Payment Gateway on the client side using Go.
+
+[![Go Report Card](https://goreportcard.com/badge/github.com/gin-gonic/gin)](https://goreportcard.com/report/github.com/gin-gonic/gin)
+[![GoDoc](https://pkg.go.dev/badge/github.com/gin-gonic/gin?status.svg)](https://pkg.go.dev/github.com/gin-gonic/gin?tab=doc)
+[![Release](https://img.shields.io/github/release/gin-gonic/gin.svg?style=flat-square)](https://github.com/gin-gonic/gin/releases)
+
+GoKuvera simplifies the implementation of the Kuvera Payment Gateway on the client side written in [Go](https://go.dev/).
 
 Overview
 --------
@@ -9,10 +14,22 @@ This module provides the following easy to implement functionality
 - Cancel payment
 - Callback validation
 
-To install use
+Supported payment channels and methods
+| Channel    | Bank Transfer | Bank VA | Bank QR | Ewallet QR | Ewallet Link |
+| ---------- | ------------: | ------: | ------: | ---------: | -----------: |
+| BCA        | ✅            | ❌      | ❌      | ❌         | ❌           |
+| BNI        | ✅            | ✅      | ❌      | ❌         | ❌           |
+| BRI        | ✅            | ✅      | ❌      | ❌         | ❌           |
+| Mandiri    | ✅            | ✅      | ❌      | ❌         | ❌           |
+| Permata    | ❌            | ✅      | ❌      | ❌         | ❌           |
+| Nobu       | ❌            | ❌      | ✅      | ❌         | ❌           |
+| Shopee Pay | ❌            | ❌      | ❌      | ✅         | ✅           |
+| Gopay      | ❌            | ❌      | ❌      | ✅         | ✅           |
 
-```markdown
-go get github.com/PT-Bima-Sakti-Alterra/GoKuvera
+Otherwise, run the following Go command to install the `GoKuvera` package:
+
+```sh
+$ go get github.com/divabsaid/GoKuvera
 ```
 
 Description
@@ -45,6 +62,7 @@ Create instance of `GoKuvera` by passing
 ```
 
 #### Create Payment
+
 ```go
     data, err = gk.CreatePayment(&gokuvera.Transaction{
         Channel:               gokuvera.BCAChannel,
