@@ -4,7 +4,7 @@
 [![GoDoc](https://pkg.go.dev/badge/github.com/divabsaid/GoKuvera?status.svg)](https://pkg.go.dev/github.com/divabsaid/GoKuvera?tab=doc)
 [![Release](https://img.shields.io/github/release/divabsaid/GoKuvera.svg?style=flat-square)](https://github.com/divabsaid/GoKuvera/releases)
 
-GoKuvera simplifies the implementation of the Kuvera Payment Gateway on the client side written in [Go](https://go.dev/).
+`GoKuvera` simplifies the implementation of the Kuvera Payment Gateway on the client side written in [Go](https://go.dev/).
 
 Overview
 --------
@@ -15,16 +15,18 @@ This module provides the following easy to implement functionality
 - Callback validation
 
 Supported payment channels and methods
-| Channel    | Bank Transfer | Bank VA | Bank QR | Ewallet QR | Ewallet Link |
-| ---------- | ------------: | ------: | ------: | ---------: | -----------: |
-| BCA        | ✅            | ❌      | ❌      | ❌         | ❌           |
-| BNI        | ✅            | ✅      | ❌      | ❌         | ❌           |
-| BRI        | ✅            | ✅      | ❌      | ❌         | ❌           |
-| Mandiri    | ✅            | ✅      | ❌      | ❌         | ❌           |
-| Permata    | ❌            | ✅      | ❌      | ❌         | ❌           |
-| Nobu       | ❌            | ❌      | ✅      | ❌         | ❌           |
-| Shopee Pay | ❌            | ❌      | ❌      | ✅         | ✅           |
-| Gopay      | ❌            | ❌      | ❌      | ✅         | ✅           |
+| Channel    | Bank Transfer | Bank VA | Bank QR | Ewallet QR | Ewallet Link | Retail VA |
+| ---------- | ------------: | ------: | ------: | ---------: | -----------: | --------: |
+| BCA        | ✅            | ✅      | ❌      | ❌         | ❌           | ❌        |
+| BNI        | ❌            | ✅      | ❌      | ❌         | ❌           | ❌        |
+| BRI        | ❌            | ✅      | ❌      | ❌         | ❌           | ❌        |
+| Mandiri    | ❌            | ✅      | ❌      | ❌         | ❌           | ❌        |
+| Permata    | ❌            | ✅      | ❌      | ❌         | ❌           | ❌        |
+| Nobu       | ❌            | ❌      | ✅      | ❌         | ❌           | ❌        |
+| Shopee Pay | ❌            | ❌      | ❌      | ✅         | ✅           | ❌        |
+| Gopay      | ❌            | ❌      | ❌      | ❌         | ❌           | ❌        |
+| Indomaret  | ❌            | ❌      | ❌      | ❌         | ❌           | ✅        |
+| Alfamart   | ❌            | ❌      | ❌      | ❌         | ❌           | ✅        |
 
 
 Payment Methods
@@ -33,6 +35,7 @@ Payment Methods
 - `gokuvera.BankQRMethod`
 - `gokuvera.EwalletQRMethod`
 - `gokuvera.EwalletLinkMethod`
+- `gokuvera.RetailVAMethod`
 
 Payment Channels
 - `gokuvera.BCAChannel`
@@ -43,6 +46,8 @@ Payment Channels
 - `gokuvera.NobuChannel`
 - `gokuvera.ShopeePayChannel`
 - `gokuvera.GopayChannel`
+- `gokuvera.IndomaretChannel`
+- `gokuvera.AlfamartChannel`
 
 Run the following Go command to install the `GoKuvera` package:
 
@@ -76,7 +81,10 @@ Create instance of `GoKuvera` by passing
 ...
 -----END PUBLIC KEY-----`)
 
-    gk := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    gk, err := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    if err != nil {
+        log.Fatal(err)
+    }
 ```
 
 #### Create Payment
@@ -158,7 +166,10 @@ func main() {
 ...
 -----END PUBLIC KEY-----`)
 
-    gk := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    gk, err := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     app := gin.Default()
 
@@ -221,7 +232,10 @@ func main() {
 ...
 -----END PUBLIC KEY-----`)
 
-    gk := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    gk, err := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+    if err != nil {
+        log.Fatal(err)
+    }
 
     app := fiber.New()
 

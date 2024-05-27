@@ -6,3 +6,5 @@ const BankQRMethod = "bank_qr"
 
 const EwalletQRMethod = "ewallet_qr"
 const EwalletLinkMethod = "ewallet_link"
+
+const RetailVAMethod = "retail_va"

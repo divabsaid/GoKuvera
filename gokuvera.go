@@ -27,14 +27,15 @@ import (
 	"github.com/google/uuid"
 )
 
-var once sync.Once
+var (
+	singleAccessTokenInstance *singleAccessToken
+	once                      sync.Once
+)
 
 type singleAccessToken struct {
 	token     string
 	expiresIn time.Time
 }
-
-var singleAccessTokenInstance *singleAccessToken
 
 type Kuvera interface {
 	CreatePayment(transaction *Transaction) (map[string]interface{}, error)
@@ -65,8 +66,11 @@ type Transaction struct {
 	Name                  string
 }
 
-func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, clientPrivateKey, clientPublicKey, serverPublicKey []byte) Kuvera {
-	interfaces, _ := net.Interfaces()
+func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, clientPrivateKey, clientPublicKey, serverPublicKey []byte) (Kuvera, error) {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get network interfaces: %v", err)
+	}
 
 	var macAddress string
 	for _, i := range interfaces {
@@ -76,34 +80,42 @@ func New(baseURL, clientSecret, clientID, partnerID, callbackURL string, clientP
 		}
 	}
 
+	if macAddress == "" {
+		return nil, errors.New("no valid MAC address found")
+	}
+
 	hasher := md5.New()
-	hasher.Write([]byte(macAddress))
+	if _, err := hasher.Write([]byte(macAddress)); err != nil {
+		return nil, fmt.Errorf("failed to hash MAC address: %v", err)
+	}
 	hashBytes := hasher.Sum(nil)
 
 	hashDecimal := new(big.Int).SetBytes(hashBytes)
 	hashDecimal.Mod(hashDecimal, big.NewInt(100000))
 
-	parsedCallbackURL, _ := url.Parse(callbackURL)
+	parsedCallbackURL, err := url.Parse(callbackURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid callback URL: %v", err)
+	}
 
 	return &kuvera{
-		baseURL:      baseURL,
-		clientSecret: clientSecret,
-		clientID:     clientID,
-		partnerID:    partnerID,
-		callbackURL:  callbackURL,
-		channelID:    hashDecimal.String(),
-		origin:       parsedCallbackURL.Host,
-
+		baseURL:          baseURL,
+		clientSecret:     clientSecret,
+		clientID:         clientID,
+		partnerID:        partnerID,
+		callbackURL:      callbackURL,
+		channelID:        hashDecimal.String(),
+		origin:           parsedCallbackURL.Host,
 		clientPrivateKey: clientPrivateKey,
 		clientPublicKey:  clientPublicKey,
 		serverPublicKey:  serverPublicKey,
-	}
+	}, nil
 }
 
 func (kvr *kuvera) CreatePayment(transaction *Transaction) (map[string]interface{}, error) {
 	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get access token: %v", err)
 	}
 
 	accessToken := single.token
@@ -121,16 +133,21 @@ func (kvr *kuvera) CreatePayment(transaction *Transaction) (map[string]interface
 
 	resBody, err := doTransactionMethodPostRequest(kvr.baseURL, relativeURL, accessToken, kvr.origin, kvr.partnerID, kvr.channelID, []byte(kvr.clientSecret), data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create payment: %v", err)
 	}
 
-	return resBody["data"].(map[string]interface{}), nil
+	dataField, ok := resBody["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("response missing 'data' field or 'data' field has an unexpected type")
+	}
+
+	return dataField, nil
 }
 
 func (kvr *kuvera) CheckPayment(transactionID string) (map[string]interface{}, error) {
 	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get access token: %v", err)
 	}
 
 	accessToken := single.token
@@ -143,16 +160,21 @@ func (kvr *kuvera) CheckPayment(transactionID string) (map[string]interface{}, e
 
 	resBody, err := doTransactionMethodPostRequest(kvr.baseURL, relativeURL, accessToken, kvr.origin, kvr.partnerID, kvr.channelID, []byte(kvr.clientSecret), data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to check payment status: %v", err)
 	}
 
-	return resBody["data"].(map[string]interface{}), nil
+	dataField, ok := resBody["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("response missing 'data' field or 'data' field has an unexpected type")
+	}
+
+	return dataField, nil
 }
 
 func (kvr *kuvera) CancelPayment(transactionID string) (map[string]interface{}, error) {
 	single, err := getAccessTokenInstance(kvr.baseURL, kvr.clientID, kvr.clientPrivateKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get access token: %v", err)
 	}
 
 	accessToken := single.token
@@ -165,21 +187,26 @@ func (kvr *kuvera) CancelPayment(transactionID string) (map[string]interface{}, 
 
 	resBody, err := doTransactionMethodPostRequest(kvr.baseURL, relativeURL, accessToken, kvr.origin, kvr.partnerID, kvr.partnerID, []byte(kvr.clientSecret), data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to cancel payment: %v", err)
 	}
 
-	return resBody["data"].(map[string]interface{}), nil
+	dataField, ok := resBody["data"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("response missing 'data' field or 'data' field has an unexpected type")
+	}
+
+	return dataField, nil
 }
 
 func (kvr *kuvera) CallbackValidation(timestamp, signature string, requestBody []byte) error {
 	publicKey, err := parsePublicKey(kvr.serverPublicKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to parse public key: %v", err)
 	}
 
 	stringToSignHashSum, err := hashSHA256(requestBody)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to calculate hash of request body: %v", err)
 	}
 
 	requestBodyHash := strings.ToLower(hex.EncodeToString(stringToSignHashSum))
@@ -188,17 +215,17 @@ func (kvr *kuvera) CallbackValidation(timestamp, signature string, requestBody [
 
 	stringToSignHashSum, err = hashSHA256([]byte(stringToSign))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to calculate hash of string to sign: %v", err)
 	}
 
 	signatureBytes, err := hex.DecodeString(signature)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to decode signature: %v", err)
 	}
 
 	err = rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, stringToSignHashSum, signatureBytes)
 	if err != nil {
-		return err
+		return fmt.Errorf("signature verification failed: %v", err)
 	}
 
 	return nil
@@ -209,59 +236,81 @@ func getAccessTokenInstance(baseURL, clientID string, privateKey []byte) (*singl
 	now := time.Now().UTC()
 
 	if singleAccessTokenInstance == nil || now.After(singleAccessTokenInstance.expiresIn) {
-		once.Do(
-			func() {
-				reqBody := url.Values{}
-				reqBody.Set("grant_type", "client_credentials")
+		once.Do(func() {
+			reqBody := url.Values{}
+			reqBody.Set("grant_type", "client_credentials")
 
-				timestamp := getTimestamp()
+			timestamp := getTimestamp()
 
-				fullURL := fmt.Sprintf("%s/api/v1/access-token", baseURL)
+			fullURL := fmt.Sprintf("%s/api/v1/access-token", baseURL)
 
-				block, _ := pem.Decode(privateKey)
-				if block == nil {
-					err = errors.New("failed to parse public key")
-					return
-				}
+			block, _ := pem.Decode(privateKey)
+			if block == nil {
+				err = errors.New("failed to parse private key")
+				return
+			}
 
-				rsaPrivateKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-				if err != nil {
-					return
-				}
+			rsaPrivateKey, parseErr := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if parseErr != nil {
+				err = fmt.Errorf("failed to parse PKCS1 private key: %v", parseErr)
+				return
+			}
 
-				stringToSign := fmt.Sprintf("%s|%s", clientID, timestamp)
-				stringToSignHashSum, err := hashSHA256([]byte(stringToSign))
-				if err != nil {
-					return
-				}
+			stringToSign := fmt.Sprintf("%s|%s", clientID, timestamp)
+			stringToSignHashSum, hashErr := hashSHA256([]byte(stringToSign))
+			if hashErr != nil {
+				err = fmt.Errorf("failed to hash string: %v", hashErr)
+				return
+			}
 
-				signatureByte, err := rsa.SignPKCS1v15(rand.Reader, rsaPrivateKey, crypto.SHA256, stringToSignHashSum)
-				if err != nil {
-					return
-				}
+			signatureByte, signErr := rsa.SignPKCS1v15(rand.Reader, rsaPrivateKey, crypto.SHA256, stringToSignHashSum)
+			if signErr != nil {
+				err = fmt.Errorf("failed to sign string: %v", signErr)
+				return
+			}
 
-				signatureStr := hex.EncodeToString(signatureByte)
+			signatureStr := hex.EncodeToString(signatureByte)
 
-				headers := map[string]string{
-					"X-TIMESTAMP":  timestamp,
-					"X-CLIENT-KEY": clientID,
-					"X-SIGNATURE":  signatureStr,
-					"Content-Type": "application/x-www-form-urlencoded",
-				}
+			headers := map[string]string{
+				"X-TIMESTAMP":  timestamp,
+				"X-CLIENT-KEY": clientID,
+				"X-SIGNATURE":  signatureStr,
+				"Content-Type": "application/x-www-form-urlencoded",
+			}
 
-				resBody, err := doRequest(http.MethodPost, fullURL, strings.NewReader(reqBody.Encode()), headers, nil)
-				if err != nil {
-					return
-				}
+			resBody, reqErr := doRequest(http.MethodPost, fullURL, strings.NewReader(reqBody.Encode()), headers, nil)
+			if reqErr != nil {
+				err = fmt.Errorf("request failed: %v", reqErr)
+				return
+			}
 
-				accessToken := resBody["data"].(map[string]interface{})["access_token"].(string)
-				expiresIn := resBody["data"].(map[string]interface{})["expires_in"].(float64)
+			data, ok := resBody["data"].(map[string]interface{})
+			if !ok {
+				err = errors.New("invalid response format: missing data field")
+				return
+			}
 
-				singleAccessTokenInstance = &singleAccessToken{
-					token:     accessToken,
-					expiresIn: now.Add(time.Second * time.Duration(expiresIn-60)),
-				}
-			})
+			accessToken, ok := data["access_token"].(string)
+			if !ok {
+				err = errors.New("invalid response format: missing access_token field")
+				return
+			}
+
+			expiresIn, ok := data["expires_in"].(float64)
+			if !ok {
+				err = errors.New("invalid response format: missing expires_in field")
+				return
+			}
+
+			singleAccessTokenInstance = &singleAccessToken{
+				token:     accessToken,
+				expiresIn: now.Add(time.Second * time.Duration(expiresIn-60)),
+			}
+		})
+	}
+
+	if singleAccessTokenInstance == nil {
+		return nil, errors.New("failed to initialize access token instance")
 	}
 
 	return singleAccessTokenInstance, err
@@ -273,19 +322,17 @@ func getTimestamp() string {
 }
 
 func hashSHA256(value []byte) ([]byte, error) {
-	s := sha256.New()
-	_, err := s.Write(value)
-	if err != nil {
-		return nil, err
+	hasher := sha256.New()
+	if _, err := hasher.Write(value); err != nil {
+		return nil, fmt.Errorf("failed to calculate SHA-256 hash: %v", err)
 	}
-	return s.Sum(nil), nil
+	return hasher.Sum(nil), nil
 }
 
 func hashHMACSHA512(value, key []byte) ([]byte, error) {
 	h := hmac.New(sha512.New, key)
-	_, err := h.Write(value)
-	if err != nil {
-		return nil, err
+	if _, err := h.Write(value); err != nil {
+		return nil, fmt.Errorf("failed to calculate HMAC-SHA512 hash: %v", err)
 	}
 	return h.Sum(nil), nil
 }
@@ -293,13 +340,13 @@ func hashHMACSHA512(value, key []byte) ([]byte, error) {
 func marshalJSONCompact(value interface{}) ([]byte, error) {
 	src, err := json.Marshal(value)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal JSON: %v", err)
 	}
 
 	dst := &bytes.Buffer{}
 	err = json.Compact(dst, src)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to compact JSON: %v", err)
 	}
 
 	return dst.Bytes(), nil
@@ -308,7 +355,7 @@ func marshalJSONCompact(value interface{}) ([]byte, error) {
 func prepareTransactionSignature(relativeURL, accessToken, timestamp string, clientSecret, reqBody []byte) (string, error) {
 	stringToSignHashSum, err := hashSHA256(reqBody)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to hash request body: %v", err)
 	}
 
 	requestBodyHash := strings.ToLower(hex.EncodeToString(stringToSignHashSum))
@@ -317,7 +364,7 @@ func prepareTransactionSignature(relativeURL, accessToken, timestamp string, cli
 
 	signatureByte, err := hashHMACSHA512([]byte(stringToSign), clientSecret)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to calculate HMAC-SHA512 hash: %v", err)
 	}
 
 	return hex.EncodeToString(signatureByte), nil
@@ -343,20 +390,20 @@ func doRequest(method, url string, body io.Reader, headers map[string]string, qu
 
 	res, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request failed: %v", err)
 	}
 	defer res.Body.Close()
 
 	err = json.NewDecoder(res.Body).Decode(&resBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to decode response body: %v", err)
 	}
 
 	if res.StatusCode != http.StatusOK {
 		if resBody["response_message"] != nil {
-			return nil, fmt.Errorf("%v", resBody["response_message"])
+			return nil, fmt.Errorf("non-OK status code: %v", resBody["response_message"])
 		}
-		return nil, errors.New("something wrong")
+		return nil, errors.New("non-OK status code and no response message")
 	}
 
 	return resBody, nil
@@ -369,17 +416,17 @@ func doTransactionMethodPostRequest(baseURL, relativeURL, accessToken, origin, p
 
 	reqBody, err := marshalJSONCompact(data)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to marshal JSON compact: %v", err)
 	}
 
 	signature, err := prepareTransactionSignature(relativeURL, accessToken, timestamp, clientSecret, reqBody)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to prepare transaction signature: %v", err)
 	}
 
 	externalID, err := uuid.NewV7()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to generate external ID: %v", err)
 	}
 
 	headers := map[string]string{
@@ -395,7 +442,7 @@ func doTransactionMethodPostRequest(baseURL, relativeURL, accessToken, origin, p
 
 	resBody, err := doRequest(http.MethodPost, fullURL, bytes.NewReader(reqBody), headers, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("request failed: %v", err)
 	}
 
 	return resBody, nil
@@ -404,11 +451,15 @@ func doTransactionMethodPostRequest(baseURL, relativeURL, accessToken, origin, p
 func parsePublicKey(publicKey []byte) (*rsa.PublicKey, error) {
 	block, _ := pem.Decode(publicKey)
 	if block == nil {
-		return nil, errors.New("failed to parse public key")
+		return nil, errors.New("failed to parse PEM block containing public key")
 	}
 	key, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
-	return key.(*rsa.PublicKey), nil
+	rsaKey, ok := key.(*rsa.PublicKey)
+	if !ok {
+		return nil, errors.New("failed to cast parsed key to RSA public key")
+	}
+	return rsaKey, nil
 }

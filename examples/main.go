@@ -31,7 +31,10 @@ func main() {
 	var data map[string]interface{}
 	var err error
 
-	gk := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+	gk, err := gokuvera.New(baseURL, clientSecret, clientID, partnerID, callbackURL, clientPrivateKey, clientPublicKey, serverPublicKey)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	data, err = gk.CreatePayment(&gokuvera.Transaction{
 		Channel:               gokuvera.BCAChannel,
