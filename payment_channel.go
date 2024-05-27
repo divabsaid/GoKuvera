@@ -9,3 +9,6 @@ const NobuChannel = "nobu"
 
 const ShopeePayChannel = "shopee_pay"
 const GopayChannel = "gopay"
+
+const IndomaretChannel = "indomaret"
+const AlfamartChannel = "alfamart"
